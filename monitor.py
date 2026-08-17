@@ -29,10 +29,20 @@ from datetime import datetime, timezone
 
 BINANCE_BASE = "https://api.binance.com/api/v3/klines"
 BINANCE_TICKER = "https://api.binance.com/api/v3/ticker/price"
+KRAKEN_OHLC = "https://api.kraken.com/0/public/OHLC"
+KRAKEN_TICKER = "https://api.kraken.com/0/public/Ticker"
+KUCOIN_CANDLES = "https://api.kucoin.com/api/v1/market/candles"
+KUCOIN_STATS = "https://api.kucoin.com/api/v1/market/stats"
 USER_AGENT = {"User-Agent": "btc-level-monitor/1.0"}
 
+INTERVAL_MIN = {"1d": 1440, "4h": 240}
+KUCOIN_INTERVAL = {"1d": "1day", "4h": "4hour"}
+
 DEFAULT_CONFIG = {
-    "symbol": "BTCUSDT",
+    "provider": "auto",
+    "binance_symbol": "BTCUSDT",
+    "kraken_pair": "XBTUSD",
+    "kucoin_symbol": "BTC-USDT",
     "poll_interval_seconds": 300,
     "notify": {
         "telegram": {
@@ -138,7 +148,7 @@ def http_post_json(url, payload, timeout=15):
         return r.read()
 
 
-def fetch_klines(symbol, interval, limit):
+def fetch_binance_klines(symbol, interval, limit):
     url = (
         f"{BINANCE_BASE}?"
         + urllib.parse.urlencode({"symbol": symbol, "interval": interval, "limit": limit})
@@ -146,7 +156,7 @@ def fetch_klines(symbol, interval, limit):
     return to_candles(http_get_json(url))
 
 
-def fetch_price(symbol):
+def fetch_binance_price(symbol):
     url = (
         f"{BINANCE_TICKER}?"
         + urllib.parse.urlencode({"symbol": symbol})
@@ -154,9 +164,80 @@ def fetch_price(symbol):
     return float(http_get_json(url)["price"])
 
 
+def fetch_kraken_klines(pair, interval):
+    url = (
+        f"{KRAKEN_OHLC}?"
+        + urllib.parse.urlencode({"pair": pair, "interval": INTERVAL_MIN[interval]})
+    )
+    data = http_get_json(url)
+    if data.get("error"):
+        raise RuntimeError(f"kraken error: {data['error']}")
+    return to_candles_kraken(data["result"][pair], interval)
+
+
+def fetch_kraken_price(pair):
+    url = (
+        f"{KRAKEN_TICKER}?"
+        + urllib.parse.urlencode({"pair": pair})
+    )
+    data = http_get_json(url)
+    if data.get("error"):
+        raise RuntimeError(f"kraken error: {data['error']}")
+    return float(data["result"][pair]["c"][0])
+
+
+def fetch_kucoin_klines(symbol, interval):
+    url = (
+        f"{KUCOIN_CANDLES}?"
+        + urllib.parse.urlencode({"type": KUCOIN_INTERVAL[interval], "symbol": symbol})
+    )
+    data = http_get_json(url)
+    if data.get("code") != "200000" or not data.get("data"):
+        raise RuntimeError(f"kucoin error: {data.get('msg') or data.get('code')}")
+    return to_candles_kucoin(data["data"], interval)
+
+
+def fetch_kucoin_price(symbol):
+    url = (
+        f"{KUCOIN_STATS}?"
+        + urllib.parse.urlencode({"symbol": symbol})
+    )
+    data = http_get_json(url)
+    if data.get("code") != "200000" or not data.get("data"):
+        raise RuntimeError(f"kucoin error: {data.get('msg') or data.get('code')}")
+    return float(data["data"]["last"])
+
+
+def fetch_market(cfg):
+    provider = cfg.get("provider", "auto")
+    order = ["binance", "kraken", "kucoin"] if provider == "auto" else [provider]
+    errors = []
+    for p in order:
+        try:
+            if p == "binance":
+                kd = fetch_binance_klines(cfg["binance_symbol"], "1d", 60)
+                k4 = fetch_binance_klines(cfg["binance_symbol"], "4h", 40)
+                price = fetch_binance_price(cfg["binance_symbol"])
+            elif p == "kraken":
+                kd = fetch_kraken_klines(cfg["kraken_pair"], "1d")
+                k4 = fetch_kraken_klines(cfg["kraken_pair"], "4h")
+                price = fetch_kraken_price(cfg["kraken_pair"])
+            elif p == "kucoin":
+                kd = fetch_kucoin_klines(cfg["kucoin_symbol"], "1d")
+                k4 = fetch_kucoin_klines(cfg["kucoin_symbol"], "4h")
+                price = fetch_kucoin_price(cfg["kucoin_symbol"])
+            else:
+                raise RuntimeError(f"unknown provider: {p}")
+            return p, kd, k4, price
+        except Exception as e:
+            errors.append(f"{p}: {e}")
+    raise RuntimeError("all providers failed: " + "; ".join(errors))
+
+
 def to_candles(raw):
     out = []
     for r in raw:
+        volume = float(r[5])
         out.append(
             {
                 "open_time": int(r[0]),
@@ -164,11 +245,57 @@ def to_candles(raw):
                 "high": float(r[2]),
                 "low": float(r[3]),
                 "close": float(r[4]),
-                "volume": float(r[5]),
+                "volume": volume,
                 "close_time": int(r[6]),
                 "quote_volume": float(r[7]),
+                "vwap": float(r[7]) / volume if volume else float(r[4]),
             }
         )
+    return out
+
+
+def to_candles_kraken(rows, interval):
+    span = INTERVAL_MIN[interval] * 60000
+    out = []
+    for r in rows:
+        t = int(r[0]) * 1000
+        volume = float(r[6])
+        out.append(
+            {
+                "open_time": t,
+                "open": float(r[1]),
+                "high": float(r[2]),
+                "low": float(r[3]),
+                "close": float(r[4]),
+                "volume": volume,
+                "close_time": t + span - 1,
+                "quote_volume": float(r[5]) * volume,
+                "vwap": float(r[5]),
+            }
+        )
+    return out
+
+
+def to_candles_kucoin(rows, interval):
+    span = INTERVAL_MIN[interval] * 60000
+    out = []
+    for r in rows:  # [time, open, close, high, low, volume, turnover], newest first
+        t = int(r[0]) * 1000
+        volume = float(r[5])
+        out.append(
+            {
+                "open_time": t,
+                "open": float(r[1]),
+                "high": float(r[3]),
+                "low": float(r[4]),
+                "close": float(r[2]),
+                "volume": volume,
+                "close_time": t + span - 1,
+                "quote_volume": float(r[6]),
+                "vwap": float(r[6]) / volume if volume else float(r[2]),
+            }
+        )
+    out.sort(key=lambda k: k["open_time"])
     return out
 
 
@@ -191,7 +318,7 @@ def compute_levels(klines_1d, klines_4h, fib):
         "S1": 2 * p - h,
         "S2": p - (h - l),
         "S3": l - 2 * (h - p),
-        "PRIOR_VWAP": prev["quote_volume"] / prev["volume"] if prev["volume"] else 0.0,
+        "PRIOR_VWAP": prev["vwap"],
         "PRIOR_HIGH": h,
         "PRIOR_LOW": l,
         "PRIOR_CLOSE": c,
@@ -201,7 +328,9 @@ def compute_levels(klines_1d, klines_4h, fib):
     session = [k for k in klines_4h if k["open_time"] >= day_start]
     if session:
         base_vol = sum(k["volume"] for k in session)
-        levels["VWAP"] = sum(k["quote_volume"] for k in session) / base_vol if base_vol else p
+        levels["VWAP"] = (
+            sum(k["vwap"] * k["volume"] for k in session) / base_vol if base_vol else p
+        )
         levels["SESSION_HIGH"] = max(k["high"] for k in session)
         levels["SESSION_LOW"] = min(k["low"] for k in session)
         closed_sess = [k for k in session if k["close_time"] <= utc_ms(now)]
@@ -367,10 +496,16 @@ def eval_close_break(cfg, setup, st, price, levels, ctx, last_closed_4h):
         if broke and state == "idle":
             vol = last_closed_4h["volume"]
             need = setup.get("volume_threshold_btc", 0)
-            ok = vol >= need
+            if ctx.get("provider") == "binance":
+                verdict = (
+                    f"CONFIRMED (vol {fmt(vol)} >= {fmt(need)} BTC)"
+                    if vol >= need
+                    else f"UNCONFIRMED (vol {fmt(vol)} < {fmt(need)} BTC)"
+                )
+            else:
+                verdict = f"volume not evaluated (src {ctx.get('provider')})"
             st["state"] = "triggered"
             st["triggered_at"] = ctx["now_ms"]
-            verdict = f"CONFIRMED (vol {fmt(vol)} >= {fmt(need)} BTC)" if ok else f"UNCONFIRMED (vol {fmt(vol)} < {fmt(need)} BTC)"
             direction = "ABOVE" if side == "long" else "BELOW"
             alerts.append(
                 f"[TRIGGERED] {setup['id']} {setup['name']}: 4h close {fmt(close)} {direction} "
@@ -449,9 +584,7 @@ def eval_rejection(cfg, setup, st, price, levels, ctx, last_closed_4h):
 
 def run_once(cfg, state, print_sheet=True):
     now = now_utc()
-    klines_1d = fetch_klines(cfg["symbol"], "1d", 60)
-    klines_4h = fetch_klines(cfg["symbol"], "4h", 40)
-    price = fetch_price(cfg["symbol"])
+    provider, klines_1d, klines_4h, price = fetch_market(cfg)
 
     levels, prev_day = compute_levels(klines_1d, klines_4h, cfg.get("fib", {}))
     atr = atr_14(klines_4h)
@@ -466,6 +599,7 @@ def run_once(cfg, state, print_sheet=True):
         "now_ms": utc_ms(now),
         "atr4h": atr,
         "avg_vol4h": avg_vol,
+        "provider": provider,
     }
 
     if print_sheet:
@@ -474,7 +608,7 @@ def run_once(cfg, state, print_sheet=True):
             if val:
                 rel.append(f"px{'<' if price < val else '>'} {name} {fmt(val)}")
         print(
-            f"[{now.strftime('%Y-%m-%d %H:%M')} UTC] BTC {fmt(price)} | "
+            f"[{now.strftime('%Y-%m-%d %H:%M')} UTC] BTC {fmt(price)} | src {provider} | "
             f"VWAP {fmt(levels['VWAP'])} (prev-day {fmt(levels['PRIOR_VWAP'])}) | "
             f"P {fmt(levels['PIVOT'])} R1 {fmt(levels['R1'])} R2 {fmt(levels['R2'])} R3 {fmt(levels['R3'])} | "
             f"S1 {fmt(levels['S1'])} S2 {fmt(levels['S2'])} S3 {fmt(levels['S3'])} | "
@@ -517,6 +651,7 @@ def main():
     ap.add_argument("--test-alert", action="store_true", help="send a test notification and exit")
     ap.add_argument("--config", default=None, help="path to config.json (default: built-in levels)")
     ap.add_argument("--state", default="state.json", help="path to state file")
+    ap.add_argument("--provider", choices=["auto", "binance", "kraken", "kucoin"], default=None, help="force data provider")
     ap.add_argument("--interval", type=int, default=None, help="poll interval seconds (overrides config)")
     args = ap.parse_args()
 
@@ -525,6 +660,9 @@ def main():
             cfg = json.load(f)
     else:
         cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+
+    if args.provider:
+        cfg["provider"] = args.provider
 
     if args.test_alert:
         notify(cfg, "[TEST] BTC level monitor online - notification channel works.")

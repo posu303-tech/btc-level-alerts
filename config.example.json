@@ -1,5 +1,8 @@
 {
-  "symbol": "BTCUSDT",
+  "provider": "auto",
+  "binance_symbol": "BTCUSDT",
+  "kraken_pair": "XBTUSD",
+  "kucoin_symbol": "BTC-USDT",
   "poll_interval_seconds": 300,
   "notify": {
     "telegram": {

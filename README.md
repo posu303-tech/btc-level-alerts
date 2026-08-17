@@ -123,8 +123,16 @@ Level references (strings) are resolved each run:
 
 ## Data, limitations, honesty
 
-- Prices are Binance spot `BTCUSDT`, polled via the public REST API
-  (typically < 1 s old, but no guarantee of tick accuracy).
+- **Provider**: defaults to `"provider": "auto"` - tries Binance spot
+  (`binance_symbol`, default `BTCUSDT`), then Kraken (`kraken_pair`,
+  default `XBTUSD`), then KuCoin (`kucoin_symbol`, default `BTC-USDT`).
+  Binance is geo-blocked on GitHub Actions US runners (HTTP 451) and
+  Kraken is geo-blocked in some regions - the fallback chain exists so at
+  least one source works from anywhere. Force one with
+  `--provider binance|kraken|kucoin|auto` or in config. Prices are
+  typically < 1 s old, but no guarantee of tick accuracy.
+- Volume thresholds (`volume_threshold_btc`, `volume_cap_btc`) are tuned to
+  Binance volumes; on Kraken the verdict reads "volume not evaluated".
 - No options/GEX/max-pain data in this tool - the desk brief flags
   Deribit expiry Aug 28 as the next derivative catalyst; verify with your
   options vendor.
