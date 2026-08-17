@@ -9,7 +9,9 @@
       "triggered_at": 1786946132939
     },
     "S1": {
-      "state": "idle"
+      "state": "triggered",
+      "last_zone_candle": 1786953599999,
+      "triggered_at": 1786965152263
     },
     "S2": {
       "state": "idle",
