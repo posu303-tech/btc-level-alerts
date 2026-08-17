@@ -1,0 +1,20 @@
+{
+  "setups": {
+    "L1": {
+      "state": "idle"
+    },
+    "L2": {
+      "state": "triggered",
+      "last_candle": 1786939199999,
+      "triggered_at": 1786946132939
+    },
+    "S1": {
+      "state": "idle"
+    },
+    "S2": {
+      "state": "idle",
+      "last_candle": 1786939199999
+    }
+  },
+  "day": 20681
+}
