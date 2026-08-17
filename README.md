@@ -70,6 +70,36 @@ so 4h-close triggers are detected within ~0-15 min of the candle close. If
 you need tighter timing for session-open decisions, also run the script
 locally during the session.
 
+## Live browser dashboard (every 5 s)
+
+The `dashboard/` folder is a self-contained, dependency-free web app
+deployed to GitHub Pages (live at
+`https://posu303-tech.github.io/btc-level-alerts/`):
+
+- Polls the same public market data (Binance -> Kraken -> KuCoin fallback)
+  **every 5 seconds** straight from your browser - no server, no API keys.
+- Recomputes all session levels (pivots, session VWAP, session H/L,
+  prior-session high, ATR, SMAs) and re-evaluates **L1/L2/S1/S2** on every
+  tick, with the same state machines as `monitor.py` (idle -> armed ->
+  triggered, stop/T1/T2 hits).
+- Shows live trigger status per setup, the full level sheet, a price banner
+  and a rolling event feed of every alert the rules fire.
+- State is kept in `localStorage`, so a page refresh does not re-trigger or
+  double-count setups; it resets only when the pivot day rolls at 00:00 UTC.
+
+To view it locally:
+
+```bash
+python -m http.server 8000 --directory dashboard
+# open http://localhost:8000
+```
+
+Deployment is automatic: any push touching `dashboard/**` or
+`.github/workflows/pages.yml` re-deploys via GitHub Actions (workflow
+`pages.yml`). The dashboard only evaluates while the tab is open - for
+24/7 monitoring that does not depend on a browser, keep the Actions
+workflow (`monitor.yml`) and/or the local monitor running.
+
 ## Configuration
 
 Copy `config.example.json` to `config.json` and edit. Nothing is required to

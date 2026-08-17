@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC-USD Level Monitor - Live Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>BTC-USD <span>Level Monitor</span></h1>
+    <div class="meta" id="meta">connecting…</div>
+  </div>
+  <div class="price-box">
+    <div class="price" id="price">--</div>
+    <div class="delta" id="delta"></div>
+    <div class="vls" id="vls"></div>
+  </div>
+  <div class="tick-box">
+    <div id="tick">Connecting…</div>
+    <div id="err" class="err"></div>
+    <button id="refresh">Refresh now</button>
+  </div>
+</header>
+
+<main>
+  <section class="cards" id="cards">
+    <article class="card" id="card-L1"><div class="loading">L1 …</div></article>
+    <article class="card" id="card-L2"><div class="loading">L2 …</div></article>
+    <article class="card" id="card-S1"><div class="loading">S1 …</div></article>
+    <article class="card" id="card-S2"><div class="loading">S2 …</div></article>
+  </section>
+
+  <section class="panels">
+    <div class="panel">
+      <h2>Levels</h2>
+      <table class="levels">
+        <thead><tr><th>Reference</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody id="levelsBody"></tbody>
+      </table>
+      <div class="sub" id="levelsSub"></div>
+    </div>
+    <div class="panel">
+      <h2>Event feed</h2>
+      <div id="events" class="events"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Dashboard polls Binance/Kraken/KuCoin public APIs every 5 s and evaluates L1/L2/S1/S2 in your browser.
+  Not investment advice. Levels rotate from market data; static fibs/shelf are from the 2026-08-17 desk brief.
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
