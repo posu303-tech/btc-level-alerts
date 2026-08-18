@@ -5,14 +5,14 @@
     },
     "L2": {
       "state": "idle",
-      "last_candle": 1787039999999
+      "last_candle": 1787054399999
     },
     "S1": {
       "state": "idle"
     },
     "S2": {
       "state": "idle",
-      "last_candle": 1787039999999
+      "last_candle": 1787054399999
     }
   },
   "day": 20682
