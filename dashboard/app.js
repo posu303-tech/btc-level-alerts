@@ -65,7 +65,9 @@ function setupDetails(setup, st, levels, price, report) {
     html.push(statRow("T2", fmt(t2), ref(setup.t2)));
   } catch (e) { /* levels not ready */ }
   if (setup.type === "zone") {
-    html.push(statRow("Zone", `${fmt(levels.VWAP)}-${fmt(levels.R1)}`, " <i>(VWAP..R1)</i>"));
+    const lo = resolve(setup.entry_min, levels);
+    const hi = resolve(setup.entry_max, levels);
+    html.push(statRow("Zone", `${fmt(lo)}-${fmt(hi)}`, ` <i>(${setup.entry_min}..${setup.entry_max})</i>`));
     html.push(statRow("Hold rule", `${setup.hold_minutes} min`));
     if (st.state === "armed") {
       const held = ((nowUtcMs() - st.armed_at) / 60000).toFixed(1);
@@ -76,14 +78,18 @@ function setupDetails(setup, st, levels, price, report) {
     html.push(statRow("Vol need", `${fmt(setup.volume_threshold_btc)} BTC/4h`));
     html.push(statRow("Last 4h vol", fmt(report.lastClosed4h.volume)));
   } else if (setup.type === "rejection") {
-    html.push(statRow("Zone", fmt(levels.R2), " <i>(R2 ± 30)</i>"));
+    const base = resolve(setup.zone_min, levels);
+    const tol = setup.zone_tolerance || 0;
+    html.push(statRow("Zone", `${fmt(base - tol)}-${fmt(base + tol)}`, ` <i>(${setup.zone_min} ± ${tol})</i>`));
     html.push(statRow("Vol cap", `${fmt(setup.volume_cap_btc)} BTC/4h`));
     const k = report.lastClosed4h;
     const rng = k.high - k.low;
     const wick = rng > 0 ? Math.round(((k.high - Math.max(k.open, k.close)) / rng) * 100) : 0;
     html.push(statRow("Last 4h", `${fmt(k.close)} ${k.close < k.open ? "red" : "green"} · wick ${wick}%`, " <i>(> 40% = reject)</i>"));
   }
-  const pnl = price - (levels[setup.id === "S1" ? "R2" : "VWAP"] || price);
+  const pnl = price - (setup.type === "rejection"
+    ? resolve(setup.zone_min, levels)
+    : setup.type === "zone" ? resolve(setup.entry_min, levels) : levels.VWAP || price);
   void pnl;
   return html.join("");
 }
@@ -110,19 +116,19 @@ function renderLevels(report) {
   const lv = levels;
   $("levelsBody").innerHTML = [
     row("Pivot", lv.PIVOT, "floor formula"),
-    row("R1", lv.R1, "L1 max · L2/S2 stop"),
-    row("R2", lv.R2, "L1 T1 · S1 short zone"),
+    row("R1", lv.R1, "L1 T2 · L2 T1"),
+    row("R2", lv.R2, "S1 stop"),
     row("R3", lv.R3),
-    row("S1", lv.S1, "S1 T2 · S2 T1"),
-    row("S2", lv.S2),
+    row("S1", lv.S1, "L1 stop · S2 break level"),
+    row("S2", lv.S2, "S2 T2"),
     row("S3", lv.S3),
-    row("Session VWAP", lv.VWAP, "anchored 00:00 UTC · L1 min"),
+    row("Session VWAP", lv.VWAP, "anchored 00:00 UTC · L2 stop"),
     row("Prior-day VWAP", lv.PRIOR_VWAP),
-    row("Session high (prior)", lv.SESSION_HIGH_PRIOR, "L2 breakout ref"),
-    row("61.8% fib", STATIC_LEVELS.FIB618, "static brief"),
-    row("78.6% fib", STATIC_LEVELS.FIB786, "L1/L2 T2"),
-    row("50% fib", STATIC_LEVELS.FIB50, "S2 T2"),
-    row("65,391 shelf", STATIC_LEVELS.SHELF65K, "L2 T2"),
+    row("Prior-day high", lv.PRIOR_HIGH, "L2 breakout ref"),
+    row("61.8% fib", STATIC_LEVELS.FIB618, "S1 zone max"),
+    row("78.6% fib", STATIC_LEVELS.FIB786, "S2 T1"),
+    row("50% fib", STATIC_LEVELS.FIB50, "static brief"),
+    row("VAH 65,500", STATIC_LEVELS.VAH, "L2 T2 · S1 zone min"),
     row("ATR (4h)", atr || 0, atr == null ? "warming up" : "14 closed candles"),
     row("SMA9 / 20 / 50", (sma9 || 0), smaNote(sma9)),
   ].join("");
@@ -139,16 +145,20 @@ function renderSetups(report) {
     const name = setup.name;
     let cond = "";
     if (setup.type === "zone") {
-      cond = `Trigger: price in VWAP..R1 (${fmt(levels.VWAP)}-${fmt(levels.R1)}) holding ≥ ${setup.hold_minutes} min. Entry ${fmt(levels.VWAP)}-${fmt(levels.R1)}.`;
+      const lo = resolve(setup.entry_min, levels);
+      const hi = resolve(setup.entry_max, levels);
+      cond = `Trigger: price in ${fmt(lo)}-${fmt(hi)} (${setup.entry_min}..${setup.entry_max}) holding ≥ ${setup.hold_minutes} min. Entry ${fmt(lo)}-${fmt(hi)}.`;
     } else if (setup.type === "close_break") {
       cond = `Trigger: 4h close ${setup.side === "long" ? "above" : "below"} ${fmt(levels[setup.level])} (${setup.level}) with vol ${setup.side === "long" ? "≥" : "≥"} ${fmt(setup.volume_threshold_btc)} BTC. Entry ~4h close.`;
     } else {
-      cond = `Trigger: price at R2 ${fmt(levels.R2)} + rejection (bearish 4h close or upper wick > 40%). Entry ${fmt(levels.R2)}±30. Cap ${fmt(setup.volume_cap_btc)} BTC/4h.`;
+      const base = resolve(setup.zone_min, levels);
+      const tol = setup.zone_tolerance || 0;
+      cond = `Trigger: price at ${fmt(base)}±${tol} + rejection (bearish 4h close or upper wick > 40%). Entry ${fmt(base - tol)}-${fmt(base + tol)}. Cap ${fmt(setup.volume_cap_btc)} BTC/4h.`;
     }
     const pnl = st.state === "triggered" ? (
       setup.side === "long"
-        ? `PnL ${fmt(price - (setup.type === "zone" ? levels.VWAP : report.lastClosed4h.close))}`
-        : `PnL ${fmt((setup.type === "rejection" ? levels.R2 : report.lastClosed4h.close) - price)}`
+        ? `PnL ${fmt(price - (setup.type === "zone" ? resolve(setup.entry_min, levels) : report.lastClosed4h.close))}`
+        : `PnL ${fmt((setup.type === "rejection" ? resolve(setup.zone_min, levels) : report.lastClosed4h.close) - price)}`
     ) : "";
     el.innerHTML = `
       <div class="card-head">

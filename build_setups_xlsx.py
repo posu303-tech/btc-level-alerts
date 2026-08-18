@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-"""Reproduce the desk-brief setup table (2026-08-17) as an Excel workbook.
+﻿#!/usr/bin/env python3
+"""Reproduce the desk-brief setup table (2026-08-18) as an Excel workbook.
 
-Run: python build_setups_xlsx.py [out.xlsx]   (default: setups_2026-08-17.xlsx)
+Run: python build_setups_xlsx.py [out.xlsx]   (default: setups_2026-08-18.xlsx)
 Regenerates the workbook with the current static/live levels.
 """
 
@@ -11,10 +11,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "setups_2026-08-17.xlsx"
+OUT = sys.argv[1] if len(sys.argv) > 1 else "setups_2026-08-18.xlsx"
 
-DATE = "2026-08-17"
-LIVE = "live 06:07 UTC (kucoin)"
+DATE = "2026-08-18"
+LIVE = "live 04:30 UTC (binance)"
 
 HDR_FILL = PatternFill("solid", fgColor="1F3864")
 HDR_FONT = Font(bold=True, color="FFFFFF", size=11)
@@ -62,36 +62,36 @@ rows = [
     [
         "L1",
         "Long",
-        "VWAP/R1 pullback",
-        "Price enters VWAP..R1 zone (63,288-63,308, VWAP rotates) and holds >= 30 min",
-        "63,288-63,308",
-        "63,002 (Pivot)",
-        "63,676 (R2)",
-        "64,986 (78.6% fib)",
+        "POC/Pivot pullback",
+        "Price enters POC 63,875..Pivot zone (63,875-63,964, Pivot rotates) and holds >= 30 min",
+        "63,875-63,964",
+        "63,319 (S1)",
+        "64,610 (prior-day high)",
+        "65,178 (R1)",
         "-",
-        "Waiting - price 63,564 below zone (LIVE)",
+        "Waiting - price 64,130 below zone (LIVE)",
     ],
     [
         "L2",
         "Long",
         "4h-close breakout",
-        "4h candle closes above prior session high 63,390",
-        "~63,429 (breakout close)",
-        "63,288 (R1)",
-        "64,986 (78.6% fib)",
-        "65,391 (shelf)",
-        "> 3,000 BTC (confirm)",
-        "TRIGGERED 06:00 UTC (close 63,429 > 63,390) - vol UNCONFIRMED (2,170 < 3,000). Watching stop/T1/T2",
+        "4h candle closes above prior-day high 64,610",
+        "~64,610 (breakout close)",
+        "64,276 (session VWAP)",
+        "65,178 (R1)",
+        "65,500 (VAH)",
+        ">= 1,700 BTC (confirm)",
+        "Waiting - price 64,130 below level (LIVE)",
     ],
     [
         "S1",
         "Short",
-        "R2 rejection",
-        "Price at 63,676 + rejection: bearish 4h close or upper wick > 40% of range",
-        "~63,676 (R2)",
-        "64,060",
-        "63,002 (Pivot)",
-        "62,614 (S1)",
+        "VAH/fib rejection",
+        "Price at 65,546 + rejection: bearish 4h close or upper wick > 40% of range",
+        "~65,500-65,593 (VAH/fib)",
+        "65,823 (R2)",
+        "64,610 (prior-day high)",
+        "63,964 (Pivot)",
         "< 1,000 BTC (cap)",
         "Waiting - no rejection yet (LIVE)",
     ],
@@ -99,13 +99,13 @@ rows = [
         "S2",
         "Short",
         "4h-close breakdown",
-        "4h candle closes below Pivot 63,002",
-        "~63,002 (below Pivot)",
-        "63,288 (R1)",
-        "62,614 (S1)",
-        "62,352 (50% fib)",
-        "> 2,000 BTC (confirm)",
-        "Waiting - price 63,564 above Pivot (LIVE)",
+        "4h candle closes below S1 63,319",
+        "~63,319 (below S1)",
+        "63,964 (Pivot)",
+        "62,166 (78.6% fib)",
+        "62,105 (S2)",
+        ">= 1,500 BTC (confirm)",
+        "Waiting - price 64,130 above S1 (LIVE)",
     ],
 ]
 for r in rows:
@@ -116,7 +116,7 @@ ws.freeze_panes = "A2"
 ws.auto_filter.ref = f"A1:J{len(rows) + 1}"
 
 note = (
-    f"Setups from the desk brief dated {DATE}. Pivots/fibs/shelf are static; VWAP, session H/L "
+    f"Setups from the desk brief dated {DATE}. POCs/fibs/VAH are static; VWAP, session H/L "
     "and prior-day VWAP rotate intraday (entry references resolve against live levels). "
     "All stop/T1/T2 references are level names - see Levels sheet."
 )
@@ -129,26 +129,27 @@ ws2.append(["Reference", "Value", "Type", "Notes"])
 style_header(ws2, 1, 4)
 
 levels = [
-    ["Prior day high", "63,390", "static (8/16 close)", "Pivot input - also L2 breakout reference"],
-    ["Prior day low", "62,716", "static (8/16 close)", "Pivot input"],
-    ["Prior day close", "62,900", "static (8/16 close)", "Pivot input"],
-    ["PIVOT", "63,002", "static", "Floor pivot (classic formula)"],
-    ["R1", "63,288", "static", "L1 entry max, L2 stop, S2 stop"],
-    ["R2", "63,676", "static", "L1 T1, S1 short zone"],
-    ["R3", "63,962", "static", ""],
-    ["S1", "62,614", "static", "S1 T2, S2 T1"],
-    ["S2", "62,328", "static", ""],
-    ["S3", "61,940", "static", ""],
-    ["Session VWAP", "63,366", f"{LIVE} - rotates", "L1 entry min; anchored 00:00 UTC"],
-    ["Prior-day VWAP", "63,057", f"{LIVE} - rotates", "Previous full day"],
-    ["Session high", "63,588", f"{LIVE} - rotates", ""],
-    ["Session low", "62,753", f"{LIVE} - rotates", ""],
-    ["61.8% fib", "63,439", "static (desk brief)", ""],
-    ["78.6% fib", "64,986", "static (desk brief)", "L1/L2 T2"],
-    ["50% fib", "62,352", "static (desk brief)", "S2 T2"],
-    ["Shelf", "65,391", "static (desk brief)", "L2 T2"],
-    ["ATR (4h)", "220", f"{LIVE}", "Average true range, 14 closed candles"],
-    ["SMA9 / SMA20 / SMA50", "63,715 / 63,846 / 63,623", f"{LIVE}", "Closed daily closes - price below all three"],
+    ["Prior day high", "64,610", "static (8/17 close)", "Pivot input - L2 breakout reference"],
+    ["Prior day low", "62,751", "static (8/17 close)", "Pivot input"],
+    ["Prior day close", "64,532", "static (8/17 close)", "Pivot input"],
+    ["PIVOT", "63,964", "static", "Floor pivot (classic formula)"],
+    ["R1", "65,178", "static", "L1 T2, L2 T1"],
+    ["R2", "65,823", "static", "S1 stop"],
+    ["R3", "67,037", "static", ""],
+    ["S1", "63,319", "static", "L1 stop, S2 break level"],
+    ["S2", "62,105", "static", "S2 T2"],
+    ["S3", "61,460", "static", ""],
+    ["Session VWAP", "64,276", f"{LIVE} - rotates", "L2 stop; anchored 00:00 UTC"],
+    ["Prior-day VWAP", "63,790", "static (8/17 close)", "Previous full day"],
+    ["Session high", "64,578", f"{LIVE} - rotates", ""],
+    ["Session low", "64,048", f"{LIVE} - rotates", ""],
+    ["POC", "63,875", "static (20-session profile)", "L1 entry min"],
+    ["61.8% fib", "65,593", "static (desk brief)", "S1 zone max"],
+    ["78.6% fib", "62,166", "static (desk brief)", "S2 T1"],
+    ["50% fib", "68,000", "static (desk brief)", ""],
+    ["VAH", "65,500", "static (20-session profile)", "L2 T2, S1 zone min"],
+    ["ATR (4h)", "live", f"{LIVE}", "Average true range, 14 closed candles"],
+    ["SMA9 / SMA20 / SMA50", "63,667 / 63,878 / 63,723", f"{LIVE}", "Closed daily closes - price above all three"],
 ]
 for r in levels:
     ws2.append(r)
@@ -158,7 +159,7 @@ ws2.freeze_panes = "A2"
 
 n2 = (
     f"Static values are from the desk brief ({DATE}); live values are the monitor's "
-    "latest run (kucoin 06:07 UTC) and rotate - pivot R1-R3/S1-S3 skew by < $100 vs "
+    "latest run (binance 04:30 UTC) and rotate - pivot R1-R3/S1-S3 skew by < $100 vs "
     "the brief due to exchange data. See README.md for how each level is computed."
 )
 ws2.cell(row=len(levels) + 3, column=1, value=n2).font = Font(italic=True, size=9, color="555555")
@@ -173,13 +174,13 @@ legend = [
     ["VWAP", "Session VWAP anchored at 00:00 UTC (includes in-progress 4h candle)"],
     ["PRIOR_VWAP", "Previous full day's VWAP (daily volume-weighted)"],
     ["SESSION_HIGH / SESSION_LOW", "Current session high / low"],
-    ["SESSION_HIGH_PRIOR", "Session high before the last closed 4h candle (breakout reference)"],
+    ["POC / VAH", "Volume-profile point of control / value-area high (20 sessions)"],
     ["FIB618 / FIB786 / FIB50", "Fibonacci levels from the desk brief"],
-    ["SHELF65K", "Static 65,391 shelf from the desk brief"],
-    ["Volume CONFIRMED", "4h candle volume >= threshold (L2 3,000 BTC, S2 2,000 BTC)"],
+    ["VAH", "Static 65,500 value-area high from the desk brief"],
+    ["Volume CONFIRMED", "4h candle volume >= threshold (L2 1,700 BTC, S2 1,500 BTC)"],
     ["Volume cap (S1)", "Entry only while 4h volume < 1,000 BTC"],
     ["L1 hold rule", "Entry requires price to hold in zone >= 30 min"],
-    ["S1 rejection", "Bearish 4h close or upper wick > 40% of the candle's range at R2"],
+    ["S1 rejection", "Bearish 4h close or upper wick > 40% of the candle's range at VAH/fib zone"],
 ]
 for r in legend:
     ws3.append(r)

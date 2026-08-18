@@ -3,7 +3,7 @@
 A dependency-free Python monitor that watches Bitcoin and alerts when the
 sell-side desk's trade setups trigger. It polls the **Binance public market
 data API (no API key required)**, recomputes session levels every run, and
-evaluates the four setups from the desk brief dated **2026-08-17** against
+evaluates the four setups from the desk brief dated **2026-08-18** against
 the live price and 4h candle closes.
 
 Runs anywhere: your machine (`python monitor.py`), a scheduled task, or
@@ -14,10 +14,10 @@ Telegram / Discord / Slack.
 
 | ID | Setup (from desk brief) | Trigger | Stop | T1 | T2 |
 |----|-------------------------|---------|------|----|----|
-| L1 | Long - VWAP/R1 pullback | Price enters VWAP..R1 zone **and holds >= 30 min** | Below Pivot | R2 | 78.6% fib |
-| L2 | Long - 4h-close breakout | 4h candle **closes above** prior session high | R1 | 78.6% fib | 65,391 shelf |
-| S1 | Short - R2 rejection | Price in R2 zone **+ rejection** (bearish 4h close or long upper wick) | 64,060 | Pivot | S1 |
-| S2 | Short - 4h-close breakdown | 4h candle **closes below** Pivot | R1 | S1 | 50% fib |
+| L1 | Long - POC/Pivot pullback | Price enters POC 63,875..Pivot zone **and holds >= 30 min** | S1 | Prior-day high | R1 |
+| L2 | Long - 4h-close breakout | 4h candle **closes above prior-day high** (vol >= 1,700 BTC/4h) | Session VWAP | R1 | VAH 65,500 |
+| S1 | Short - VAH/fib rejection | Price in 65,546 +/- 50 **+ rejection** (bearish 4h close or long upper wick) | R2 | Prior-day high | Pivot |
+| S2 | Short - 4h-close breakdown | 4h candle **closes below S1** (vol >= 1,500 BTC/4h) | Pivot | 78.6% fib | S2 |
 
 All entry/stop/target references resolve against automatically computed
 session levels, so pivots, VWAP, session high/low and prior-day VWAP rotate
@@ -37,16 +37,16 @@ python monitor.py --interval 60   # faster polling for a local session
 Each poll prints a level sheet, e.g.:
 
 ```
-[2026-08-17 12:00 UTC] BTC 63,530 | VWAP 63,310 (prev-day 63,070) | P 63,002 R1 63,288 R2 63,676 R3 63,962 | S1 62,614 S2 62,328 S3 61,940 | Sess H/L 63,580/62,751 | 4h vol 1,201 (avg 1,845) | ATR4h 325 | px> SMA9 63,556 px< SMA20 63,827 px< SMA50 63,614
+[2026-08-18 04:30 UTC] BTC 64,130 | VWAP 64,276 (prev-day 64,009) | P 63,964 R1 65,178 R2 65,823 R3 67,037 | S1 63,319 S2 62,105 S3 61,460 | Sess H/L 64,578/64,048 | 4h vol 1,753 (avg 2,004) | ATR4h 412 | px> SMA9 63,667 px> SMA20 63,878 px> SMA50 63,723
 ```
 
 Alert messages look like this:
 
 ```
-[ARMED] L1 L1 VWAP/R1 pullback long: price 63,290 entered zone 63,275-63,288. Confirm = holds >= 30 min above 63,275. Stop 63,002 | T1 63,676 | T2 64,986.
-[TRIGGERED] L2 L2 4h-close breakout long: 4h close 63,600 ABOVE 63,580. Volume CONFIRMED (vol 3,214 >= 3,000 BTC). ENTER ~63,600. Stop 63,288 | T1 64,986 | T2 65,391.
-[R2 TEST] S1 S1 R2 rejection short: price 63,680 touching 63,676 - no rejection yet. Watch for long upper wick / bearish close. Entry only on rejection; cap 1,000 BTC/4h.
-[STOP HIT] S2 S2 4h-close breakdown short: price 63,290 >= stop 63,288. Closed.
+[ARMED] L1 L1 POC/Pivot pullback long: price 63,920 entered zone 63,875-63,964. Confirm = holds >= 30 min above 63,875. Stop 63,319 | T1 64,610 | T2 65,178.
+[TRIGGERED] L2 L2 4h-close breakout long: 4h close 64,690 ABOVE 64,610. Volume CONFIRMED (vol 2,850 >= 1,700 BTC). ENTER ~64,690. Stop 64,276 | T1 65,178 | T2 65,500.
+[ZONE TEST] S1 S1 VAH/fib rejection short: price 65,540 touching 65,546 - no rejection yet. Watch for long upper wick / bearish close. Entry only on rejection; cap 1,000 BTC/4h.
+[STOP HIT] S2 S2 4h-close breakdown short: price 64,200 >= stop 63,964. Closed.
 ```
 
 ## 24/7 monitoring via GitHub Actions (free)
@@ -115,7 +115,7 @@ Level references (strings) are resolved each run:
 | `SESSION_HIGH` / `SESSION_LOW` | Current session high / low |
 | `SESSION_HIGH_PRIOR` | Session high **before the last closed 4h candle** (breakout reference, does not chase price) |
 | `PRIOR_HIGH/LOW/CLOSE` | Last closed daily candle OHLC |
-| `FIB618`, `FIB786`, `FIB50`, `SHELF65K` | Static levels from the desk brief (see below) |
+| `FIB618`, `FIB786`, `FIB50`, `VAH` | Static levels from the desk brief (see below) |
 
 ### Setups - per-type options
 
@@ -133,9 +133,9 @@ Level references (strings) are resolved each run:
 
 - Auto levels (pivots, VWAP, session H/L) update every day at 00:00 UTC on
   their own.
-- Static levels - `fib.fib618/fib786/fib50` and the 65,391 shelf - are dated
-  to the **2026-08-17** brief. Replace them when the desk publishes new
-  swing-based levels.
+- Static levels - `fib.fib618/fib786/fib50` (65,593 / 62,166 / 68,000) and
+  `VAH` (65,500) - are dated to the **2026-08-18** brief. Replace them when
+  the desk publishes new swing-based levels.
 - Prior day's high/low/close used for pivots are taken from Binance; the
   desk brief's own pivot numbers will match these inputs to within exchange
   skew (< $100 typically).
