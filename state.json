@@ -1,13 +1,14 @@
 {
   "setups": {
     "L1": {
-      "state": "triggered",
+      "state": "idle",
       "armed_at": 1787109243522,
-      "triggered_at": 1787115895370
+      "triggered_at": 1787115895370,
+      "guard": 65235.3
     },
     "L2": {
       "state": "idle",
-      "last_candle": 1787126399999,
+      "last_candle": 1787140799999,
       "triggered_at": 1787072605541
     },
     "S1": {
@@ -15,7 +16,7 @@
     },
     "S2": {
       "state": "idle",
-      "last_candle": 1787126399999
+      "last_candle": 1787140799999
     }
   },
   "day": 20683
