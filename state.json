@@ -6,7 +6,7 @@
       "triggered_at": 1787115895370
     },
     "L2": {
-      "state": "triggered",
+      "state": "idle",
       "last_candle": 1787111999999,
       "triggered_at": 1787072605541
     },
