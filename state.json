@@ -8,7 +8,7 @@
     },
     "L2": {
       "state": "triggered",
-      "last_candle": 1787860799999,
+      "last_candle": 1787889599999,
       "triggered_at": 1787862673050
     },
     "S1": {
@@ -16,9 +16,9 @@
     },
     "S2": {
       "state": "idle",
-      "last_candle": 1787860799999,
+      "last_candle": 1787889599999,
       "triggered_at": 1787474388001
     }
   },
-  "day": 20691
+  "day": 20692
 }
