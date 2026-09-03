@@ -7,7 +7,7 @@
       "guard": 65235.3
     },
     "L2": {
-      "state": "triggered",
+      "state": "idle",
       "last_candle": 1788465599999,
       "triggered_at": 1788444782785
     },
@@ -15,7 +15,7 @@
       "state": "idle"
     },
     "S2": {
-      "state": "triggered",
+      "state": "idle",
       "last_candle": 1788465599999,
       "triggered_at": 1787936161001
     }
