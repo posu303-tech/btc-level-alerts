@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 BTC-USD level monitor - alerts when the desk's trade setups trigger.
 
@@ -421,6 +421,49 @@ def notify(cfg, text):
                     print(f"[notify] {name} failed: {e}")
 
 
+def handle_exit(setup, st, price, stop, t1, t2, alerts, set_guard=False):
+    """Run the shared triggered-state exit logic (stop / T1 / T2) for a setup.
+
+    Transition to ``idle`` on stop or T2; T1 is a partial (stays triggered).
+    Returns the outcome string (``stop``/``t1``/``t2``/``None``) so callers can
+    run setup-specific follow-up (e.g. arming a re-entry guard).
+    """
+    side = setup["side"]
+    if side == "long":
+        if price <= stop:
+            st["state"] = "idle"
+            if set_guard:
+                st["guard"] = price
+            alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} <= stop {fmt(stop)}. Closed.")
+            return "stop"
+        if price >= t2:
+            st["state"] = "idle"
+            if set_guard:
+                st["guard"] = price
+            alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t2)}. Full exit.")
+            return "t2"
+        if price >= t1:
+            alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t1)}. Take partial.")
+            return "t1"
+    else:  # short
+        if price >= stop:
+            st["state"] = "idle"
+            if set_guard:
+                st["guard"] = price
+            alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} >= stop {fmt(stop)}. Closed.")
+            return "stop"
+        if price <= t2:
+            st["state"] = "idle"
+            if set_guard:
+                st["guard"] = price
+            alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t2)}. Full exit.")
+            return "t2"
+        if price <= t1:
+            alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t1)}. Take partial.")
+            return "t1"
+    return None
+
+
 def eval_zone(cfg, setup, st, price, levels, ctx):
     alerts = []
     lo = resolve(setup["entry_min"], levels)
@@ -465,17 +508,7 @@ def eval_zone(cfg, setup, st, price, levels, ctx):
                 f"T1 {fmt(t1)} | T2 {fmt(t2)}."
             )
     elif state == "triggered":
-        if setup["side"] == "long":
-            if price <= stop:
-                st["state"] = "idle"
-                st["guard"] = price
-                alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} <= stop {fmt(stop)}. Closed.")
-            elif price >= t2:
-                st["state"] = "idle"
-                st["guard"] = price
-                alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t2)}. Full exit.")
-            elif price >= t1:
-                alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t1)}. Take partial.")
+        handle_exit(setup, st, price, stop, t1, t2, alerts, set_guard=True)
     return alerts
 
 
@@ -512,25 +545,8 @@ def eval_close_break(cfg, setup, st, price, levels, ctx, last_closed_4h):
                 f"{fmt(level)}. Volume {verdict}. ENTER ~{fmt(close)}. Stop {fmt(stop)} | "
                 f"T1 {fmt(t1)} | T2 {fmt(t2)}."
             )
-    elif state == "triggered":
-        if side == "long":
-            if price <= stop:
-                st["state"] = "idle"
-                alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} <= stop {fmt(stop)}. Closed.")
-            elif price >= t2:
-                st["state"] = "idle"
-                alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t2)}. Full exit.")
-            elif price >= t1:
-                alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} >= {fmt(t1)}. Take partial.")
-        else:
-            if price >= stop:
-                st["state"] = "idle"
-                alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} >= stop {fmt(stop)}. Closed.")
-            elif price <= t2:
-                st["state"] = "idle"
-                alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t2)}. Full exit.")
-            elif price <= t1:
-                alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t1)}. Take partial.")
+    if st.get("state") == "triggered":
+        handle_exit(setup, st, price, stop, t1, t2, alerts)
     return alerts
 
 
@@ -570,19 +586,11 @@ def eval_rejection(cfg, setup, st, price, levels, ctx, last_closed_4h):
                     f"rejection; cap {fmt(cap)} BTC/4h."
                 )
     elif state == "triggered":
-        if setup["side"] == "short":
-            if price >= stop:
-                st["state"] = "idle"
-                alerts.append(f"[STOP HIT] {setup['id']}: price {fmt(price)} >= stop {fmt(stop)}. Closed.")
-            elif price <= t2:
-                st["state"] = "idle"
-                alerts.append(f"[T2 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t2)}. Full exit.")
-            elif price <= t1:
-                alerts.append(f"[T1 HIT] {setup['id']}: price {fmt(price)} <= {fmt(t1)}. Take partial.")
+        handle_exit(setup, st, price, stop, t1, t2, alerts)
     return alerts
 
 
-def run_once(cfg, state, print_sheet=True):
+def run_once(cfg, state, print_sheet=True, json_out=False):
     now = now_utc()
     provider, klines_1d, klines_4h, price = fetch_market(cfg)
 
@@ -602,7 +610,26 @@ def run_once(cfg, state, print_sheet=True):
         "provider": provider,
     }
 
-    if print_sheet:
+    sheet = None
+    if json_out:
+        sheet = {
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "provider": provider,
+            "price": price,
+            "levels": {k: (round(v, 2) if isinstance(v, float) else v) for k, v in levels.items()},
+            "atr_4h": atr,
+            "avg_vol_4h": avg_vol,
+            "last_closed_4h_volume": last_closed_4h["volume"],
+            "smas": {"sma9": sma9, "sma20": sma20, "sma50": sma50},
+            "previous_day": {
+                "open_time": prev_day["open_time"],
+                "high": prev_day["high"],
+                "low": prev_day["low"],
+                "close": prev_day["close"],
+            },
+            "alerts": [],
+        }
+    elif print_sheet:
         rel = []
         for name, val in (("SMA9", sma9), ("SMA20", sma20), ("SMA50", sma50)):
             if val:
@@ -620,14 +647,17 @@ def run_once(cfg, state, print_sheet=True):
     day_key = prev_day["open_time"] // 86400000
     if state.get("day") != day_key:
         state["day"] = day_key
-        notify(
-            cfg,
+        session_alert = (
             f"[NEW SESSION] {now.strftime('%Y-%m-%d')} levels: "
             f"P {fmt(levels['PIVOT'])} R1 {fmt(levels['R1'])} R2 {fmt(levels['R2'])} "
             f"S1 {fmt(levels['S1'])} S2 {fmt(levels['S2'])} | "
             f"VWAP {fmt(levels['VWAP'])} | prior day H/L/C {fmt(levels['PRIOR_HIGH'])}/"
-            f"{fmt(levels['PRIOR_LOW'])}/{fmt(levels['PRIOR_CLOSE'])}",
+            f"{fmt(levels['PRIOR_LOW'])}/{fmt(levels['PRIOR_CLOSE'])}"
         )
+        if json_out:
+            sheet["alerts"].append(session_alert)
+        else:
+            notify(cfg, session_alert)
 
     for setup in cfg.get("setups", []):
         st = state["setups"].setdefault(setup["id"], {"state": "idle"})
@@ -640,8 +670,14 @@ def run_once(cfg, state, print_sheet=True):
             alerts = eval_rejection(cfg, setup, st, price, levels, ctx, last_closed_4h)
         else:
             alerts = []
-        for a in alerts:
-            notify(cfg, a)
+        if json_out:
+            sheet["alerts"].extend(alerts)
+        else:
+            for a in alerts:
+                notify(cfg, a)
+
+    if json_out:
+        print(json.dumps(sheet))
 
 
 def main():
@@ -653,6 +689,7 @@ def main():
     ap.add_argument("--state", default="state.json", help="path to state file")
     ap.add_argument("--provider", choices=["auto", "binance", "kraken", "kucoin"], default=None, help="force data provider")
     ap.add_argument("--interval", type=int, default=None, help="poll interval seconds (overrides config)")
+    ap.add_argument("--json", action="store_true", help="print one machine-readable level sheet as JSON")
     args = ap.parse_args()
 
     if args.config:
@@ -676,6 +713,10 @@ def main():
         except Exception as e:
             print(f"[error] {e}", file=sys.stderr)
             sys.exit(1)
+        return
+
+    if args.json:
+        run_once(cfg, state, print_sheet=False, json_out=True)
         return
 
     interval = args.interval or cfg.get("poll_interval_seconds", 300)
