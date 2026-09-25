@@ -32,6 +32,7 @@ python monitor.py --levels        # print the level sheet once and exit
 python monitor.py --once          # single check (what GitHub Actions runs)
 python monitor.py --test-alert    # verify your notification channel
 python monitor.py --interval 60   # faster polling for a local session
+python monitor.py --json          # single machine-readable level sheet (JSON doc)
 ```
 
 Each poll prints a level sheet, e.g.:
@@ -150,6 +151,23 @@ Level references (strings) are resolved each run:
 - **Volume context**: 4h candle volume vs the mean of the last 20 closed 4h
   candles; daily context via the 20-candle 1d window.
 - **SMA9/20/50**: simple means of closed daily closes.
+
+## Testing
+
+The repo ships an offline pytest suite (no network access needed - market data
+and the clock are monkeypatched). It covers candle conversion, pivot/VWAP/ATR
+math, state persistence, the three setup state machines (`zone`, `close_break`,
+`rejection`) including the exit transitions, and the JSON output shape.
+
+```bash
+python -m pytest tests/ -v
+```
+
+Run lint (bug-catching rules only):
+
+```bash
+ruff check --select F,E9 .
+```
 
 ## Data, limitations, honesty
 
