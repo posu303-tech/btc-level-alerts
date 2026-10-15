@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "btc-level-alerts"
+version = "1.0.0"
+description = "BTC-USD level monitor: polls market data, computes session pivots/VWAP, alerts when desk trade setups trigger"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "posu303-tech" }]
+keywords = ["bitcoin", "trading", "levels", "monitor", "alerts"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = []
+
+[project.optional-dependencies]
+xlsx = ["openpyxl"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+btc-level-monitor = "monitor:main"
+build-setups-xlsx = "build_setups_xlsx:main"
+
+[tool.setuptools]
+py-modules = ["monitor", "build_setups_xlsx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 119
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["F", "E9"]
