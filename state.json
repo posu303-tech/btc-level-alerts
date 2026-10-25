@@ -15,7 +15,7 @@
       "state": "idle"
     },
     "S2": {
-      "state": "triggered",
+      "state": "idle",
       "last_candle": 1792943999999,
       "triggered_at": 1792668132973
     }
